@@ -1,3 +1,7 @@
+// PebbleJS watchface by Chris Lesniewski (ctl@mit.edu).
+// Downloads bus locations from nextbus.com and displays the closest bus.
+
+
 var coords = {
   latitude: 37.8717,
   longitude: -122.2728,
@@ -21,7 +25,7 @@ var text_box = new UI.Text({
   position: new Vector2(0, 50),
   size: new Vector2(144, 30),
   font: 'gothic-24-bold',
-  text: 'Text Anywhere!',
+  text: '(error)',
   textAlign: 'center',
   textOverflow: 'wrap'
 });
@@ -37,7 +41,7 @@ function update_text() {
 
 function parse_nextbus_xml(data) {
   var lines = data.split('\n');
-  var vehicles = [];
+  var vehicles = {};
   for (var i = 0; i < lines.length; i++) {
     if (lines[i].indexOf('<vehicle ') != -1) {
       var attrs = lines[i].match(/(\w+)="([^"]*)"/g);
@@ -46,7 +50,7 @@ function parse_nextbus_xml(data) {
         var m = attrs[j].match(/(\w+)="([^"]*)"/);
         vehicle[m[1]] = m[2];
       }
-      vehicles[vehicles.length] = vehicle;
+      vehicles[vehicle.id] = vehicle;
     }
   }
   return vehicles;
@@ -78,13 +82,13 @@ function update_from_web() {
     function(data, status, request) {
       var vehicles = parse_nextbus_xml(data);
       var closest_distance_miles = Infinity;
-      for (var i = 0; i < vehicles.length; i++) {
-        var loc = latlon_to_distance_heading(
-          coords.latitude, coords.longitude, vehicle.lat, vehicle.lon);
+      for (var id in vehicles) {
+        var v = vehicles[id];
+        var loc = latlon_to_distance_heading(coords.latitude, coords.longitude, v.lat, v.lon);
         if (closest_distance_miles > loc.distance_miles) {
           closest_distance_miles = loc.distance_miles;
-          text = vehicle.routeTag + ": " + loc.distance_miles.toFixed(2) + " mi " + loc.heading;
-          timestamp = Date.now() - (1000.0 * vehicle.secsSinceReport);
+          text = v.routeTag + ": " + loc.distance_miles.toFixed(2) + " mi " + loc.heading;
+          timestamp = Date.now() - (1000.0 * v.secsSinceReport);
         }
       }
       update_text();
