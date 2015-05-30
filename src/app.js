@@ -35,6 +35,40 @@ function update_text() {
   text_box.text(text + " (" + Math.round((Date.now() - timestamp)/1000) + " sec)");
 }
 
+function parse_nextbus_xml(data) {
+  var lines = data.split('\n');
+  var vehicles = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf('<vehicle ') != -1) {
+      var attrs = lines[i].match(/(\w+)="([^"]*)"/g);
+      var vehicle = {};
+      for (var j = 0; j < attrs.length; j++) {
+        var m = attrs[j].match(/(\w+)="([^"]*)"/);
+        vehicle[m[1]] = m[2];
+      }
+      vehicles[vehicles.length] = vehicle;
+    }
+  }
+  return vehicles;
+}
+
+function latlon_to_distance_heading(from_lat, from_lon, to_lat, to_lon) {
+  var loc = {};
+  // Lame approximation, valid for short distances, far away from poles, and
+  // not crossing dateline.
+  var earth_circumference_m = 40075160;
+  loc.dy_m = (to_lat - from_lat) * earth_circumference_m / 360;
+  loc.dx_m = (to_lon - from_lon) * Math.cos(from_lat*Math.PI/180) * earth_circumference_m / 360;
+
+  loc.distance_m = Math.sqrt(loc.dx_m*loc.dx_m + loc.dy_m*loc.dy_m);
+  var miles_per_m = 0.000621371;
+  loc.distance_miles = miles_per_m * loc.distance_m;
+  loc.direction = Math.atan2(dy_m, dx_m);
+  loc.heading_int = (Math.round(direction * 4/Math.PI) + 8) % 8;
+  loc.heading = ["E","NE","N","NW","W","SW","S","SE"][loc.heading_int];
+  return loc;
+}
+
 function update_from_web() {
   ajax(
     {
@@ -42,32 +76,15 @@ function update_from_web() {
       cache: false,
     },
     function(data, status, request) {
-      var closest_distance_m = Infinity;
-      var lines = data.split('\n');
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i].indexOf('<vehicle ') != -1) {
-          var attrs = lines[i].match(/(\w+)="([^"]*)"/g);
-          var vehicle = {};
-          for (var j = 0; j < attrs.length; j++) {
-            var m = attrs[j].match(/(\w+)="([^"]*)"/);
-            vehicle[m[1]] = m[2];
-          }
-          
-          // Lame approximation, valid for short distances, far away from poles, and not crossing dateline.
-          var earth_circumference_m = 40075160;
-          var dy_m = (vehicle.lat - coords.latitude) * earth_circumference_m/360;
-          var dx_m = (vehicle.lon - coords.longitude) * Math.cos(vehicle.lat*Math.PI/180) * earth_circumference_m/360;
-  
-          var distance_m = Math.sqrt(dx_m*dx_m + dy_m*dy_m);
-          var direction = Math.atan2(dy_m, dx_m);
-          var heading = ["W","SW","S","SE","E","NE","N","NW","W"][Math.round(4*(1 + direction/Math.PI))];
-          if (closest_distance_m > distance_m) {
-            closest_distance_m = distance_m;
-            var miles_per_m = 0.000621371;
-            var distance_miles = miles_per_m * distance_m;
-            text = vehicle.routeTag + ": " + distance_miles.toFixed(2) + " mi " + heading;
-            timestamp = Date.now() - (1000.0 * vehicle.secsSinceReport);
-          }
+      var vehicles = parse_nextbus_xml(data);
+      var closest_distance_miles = Infinity;
+      for (var i = 0; i < vehicles.length; i++) {
+        var loc = latlon_to_distance_heading(
+          coords.latitude, coords.longitude, vehicle.lat, vehicle.lon);
+        if (closest_distance_miles > loc.distance_miles) {
+          closest_distance_miles = loc.distance_miles;
+          text = vehicle.routeTag + ": " + loc.distance_miles.toFixed(2) + " mi " + loc.heading;
+          timestamp = Date.now() - (1000.0 * vehicle.secsSinceReport);
         }
       }
       update_text();
