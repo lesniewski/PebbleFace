@@ -62,6 +62,7 @@ function refresh_vehicle_locations(callback) {
 
 // Download vehicle locations from nextbus.com.
 function get_nextbus_vehicle_locations(agency_routes, on_success, on_error) {
+  // XXX add dirtag filter
   var vehicles = [];
   var outstanding = agency_routes.length;
   agency_routes.forEach(function(spec) {
@@ -84,17 +85,17 @@ function get_nextbus_vehicle_locations(agency_routes, on_success, on_error) {
 
 // Convert <vehicle .../> lines in nextbus result XML into JSON.
 function parse_nextbus_xml(data) {
-  var vehicles = [];
-  data.match(/<vehicle\s+[^>]*\/\s*>/g).forEach(function(tag) {      
+  var tags = data.match(/<vehicle\s+[^>]*\/\s*>/g);
+  if (tags === null) { return []; }
+  return tags.map(function(tag) {      
     var vehicle = {};
     tag.match(/(\w+)="([^"]*)"/g).forEach(function(attr) {
       var m = attr.match(/(\w+)="([^"]*)"/);
       vehicle[m[1]] = m[2];
     });
     vehicle.timestamp = Date.now() - (1000.0 * vehicle.secsSinceReport);
-    vehicles.push(vehicle);
+    return vehicle;
   });
-  return vehicles;
 }
 
 // Order the vehicles by distance. Then keep only the closest vehicles in any cardinal direction.
